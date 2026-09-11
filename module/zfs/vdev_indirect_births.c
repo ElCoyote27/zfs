@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: CDDL-1.0
 /*
- * CDDL HEADER START
- *
  * This file and its contents are supplied under the terms of the
  * Common Development and Distribution License ("CDDL"), version 1.0.
  * You may only use this file in accordance with the terms of version
@@ -9,9 +7,7 @@
  *
  * A full copy of the text of the CDDL should have accompanied this
  * source.  A copy of the CDDL is also available via the Internet at
- * http://www.illumos.org/license/CDDL.
- *
- * CDDL HEADER END
+ * https://opensource.org/license/CDDL-1.0.
  */
 
 /*
@@ -147,7 +143,7 @@ vdev_indirect_births_add_entry(vdev_indirect_births_t *vib,
 
 	old_size = vdev_indirect_births_size_impl(vib);
 	dmu_write(vib->vib_objset, vib->vib_object, old_size, sizeof (vibe),
-	    &vibe, tx);
+	    &vibe, tx, DMU_READ_NO_PREFETCH);
 	vib->vib_phys->vib_count++;
 	new_size = vdev_indirect_births_size_impl(vib);
 

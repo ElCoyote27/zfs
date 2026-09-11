@@ -1,24 +1,14 @@
 #!/bin/ksh -p
 # SPDX-License-Identifier: CDDL-1.0
 #
-# CDDL HEADER START
+# This file and its contents are supplied under the terms of the
+# Common Development and Distribution License ("CDDL"), version 1.0.
+# You may only use this file in accordance with the terms of version
+# 1.0 of the CDDL.
 #
-# The contents of this file are subject to the terms of the
-# Common Development and Distribution License (the "License").
-# You may not use this file except in compliance with the License.
-#
-# You can obtain a copy of the license at usr/src/OPENSOLARIS.LICENSE
-# or https://opensource.org/licenses/CDDL-1.0.
-# See the License for the specific language governing permissions
-# and limitations under the License.
-#
-# When distributing Covered Code, include this CDDL HEADER in each
-# file and include the License file at usr/src/OPENSOLARIS.LICENSE.
-# If applicable, add the following below this CDDL HEADER, with the
-# fields enclosed by brackets "[]" replaced with your own identifying
-# information: Portions Copyright [yyyy] [name of copyright owner]
-#
-# CDDL HEADER END
+# A full copy of the text of the CDDL should have accompanied this
+# source.  A copy of the CDDL is also available via the Internet at
+# https://opensource.org/license/CDDL-1.0.
 #
 
 # Copyright (c) 2024 by Lawrence Livermore National Security, LLC.
@@ -60,7 +50,12 @@ set_tunable64 SIT_OUT_CHECK_INTERVAL 20
 
 log_must truncate -s 150M $TEST_BASE_DIR/vdev.$$.{0..9}
 
-for raidtype in raidz2 raidz3 draid2 draid3 ; do
+raidtypes=(raidz2 raidz3 draid2 draid3)
+retry=0
+
+for (( t=0; t<4; t++ )); do
+	raidtype="${raidtypes[$t]}"
+
 	log_must zpool create $TESTPOOL2 $raidtype $TEST_BASE_DIR/vdev.$$.{0..9}
 	log_must zpool set autosit=on $TESTPOOL2 "${raidtype}-0"
 	log_must dd if=/dev/urandom of=/$TESTPOOL2/bigfile bs=1M count=400
@@ -90,13 +85,24 @@ for raidtype in raidz2 raidz3 draid2 draid3 ; do
 		fi
 	done
 
-	log_must test "$(get_vdev_prop sit_out $TESTPOOL2 $SLOW_VDEV)" == "on"
-
 	# Clear fault injection
 	log_must zinject -c all
 
-	# Wait for us to exit our sit out period
-	log_must wait_sit_out $TESTPOOL2 $SLOW_VDEV 10
+	if test "$(get_vdev_prop sit_out $TESTPOOL2 $SLOW_VDEV)" == "on"; then
+		# Wait for us to exit our sit out period
+		log_must wait_sit_out $TESTPOOL2 $SLOW_VDEV 10
+	else
+		# Depending on exactly how the blocks are laid out and the
+		# I/O is issued we may not always trigger a sitout.  Allow
+		# up to 3 retries to avoid false positives.
+		if test $retry -lt 3; then
+			retry=$((retry + 1))
+			t=$(($t - 1))
+			log_note "Retrying $retry/3 $raidtype vdev type"
+		else
+			log_fail "Exceeded total allowed retries"
+		fi
+	fi
 
 	log_must test "$(get_vdev_prop sit_out $TESTPOOL2 $SLOW_VDEV)" == "off"
 	destroy_pool $TESTPOOL2
